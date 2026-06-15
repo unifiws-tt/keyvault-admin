@@ -66,7 +66,7 @@
 (function(){
  "use strict";
  var FN_URL="https://jmtcdegcsrxjenxjnxse.supabase.co/functions/v1/keyvault";
- var PUB_KEY="sb_publishable_ufUjg7d8sbcyFCZUv1JvCg_0hAuhzm3";
+ var ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptdGNkZWdjc3J4amVueGpueHNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMjYxMDgsImV4cCI6MjA5NjkwMjEwOH0.MAIA-mUwOXtVfsrkDB7txlJxeWDrRANc-hLwm5gL8ng";
  var AUTH_BASE="https://jmtcdegcsrxjenxjnxse.supabase.co/auth/v1";
  var state={token:"",email:"",secrets:null};
  var revealCache={};
@@ -75,20 +75,30 @@
  function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
  function dots(n){var s="";var i;for(i=0;i<n;i++){s+="\u2022";}return s;}
  function toast(msg,tone){var box=el("toast");box.innerHTML='<div class="toast '+(tone==="error"?"toast-err":"toast-ok")+'">'+esc(msg)+'</div>';window.setTimeout(function(){box.innerHTML="";},2600);}
- function headers(token){return{"Content-Type":"application/json","apikey":PUB_KEY,"Authorization":"Bearer "+(token||PUB_KEY)};}
+ function authHeaders(token){return{"Content-Type":"application/json","apikey":ANON_KEY,"Authorization":"Bearer "+token};}
+ function fnHeaders(token){return{"Content-Type":"application/json","apikey":ANON_KEY,"Authorization":"Bearer "+token};}
 
  function doLogin(email,password){
-   return fetch(AUTH_BASE+"/token?grant_type=password",{method:"POST",headers:{"Content-Type":"application/json","apikey":PUB_KEY},body:JSON.stringify({email:email,password:password})}).then(function(r){return r.json();});
+   return fetch(AUTH_BASE+"/token?grant_type=password",{
+     method:"POST",
+     headers:{"Content-Type":"application/json","apikey":ANON_KEY},
+     body:JSON.stringify({email:email,password:password})
+   }).then(function(r){return r.json();});
  }
  function callFn(action,payload){
-   var body={action:action};if(payload){var k;for(k in payload){if(payload.hasOwnProperty(k)){body[k]=payload[k];}}}
-   return fetch(FN_URL,{method:"POST",headers:headers(state.token),body:JSON.stringify(body)}).then(function(r){
+   var body={action:action};
+   if(payload){var k;for(k in payload){if(payload.hasOwnProperty(k)){body[k]=payload[k];}}}
+   return fetch(FN_URL,{
+     method:"POST",
+     headers:fnHeaders(state.token),
+     body:JSON.stringify(body)
+   }).then(function(r){
      return r.json().then(function(data){return{ok:r.ok,status:r.status,data:data};}).catch(function(){return{ok:r.ok,status:r.status,data:{}};});
    });
  }
  function errMsg(res){
    if(res&&res.data&&res.data.error){return res.data.error;}
-   if(res&&res.status===401){return "Unauthorized (401) \u2014 not the owner, or session expired.";}
+   if(res&&res.status===401){return "Unauthorized (401) \u2014 session expired? Re-login.";}
    if(res&&res.status===403){return "Forbidden (403) \u2014 owner allowlist rejected.";}
    return "Request failed ("+(res?res.status:"?")+").";
  }
@@ -124,7 +134,7 @@
      doLogin(email,pass).then(function(res){
        if(res.access_token){state.token=res.access_token;state.email=email;renderVault();loadSecrets();}
        else{btn.disabled=false;btn.textContent="Unlock vault";errBox.textContent=res.error_description||res.msg||"Login failed.";errBox.className="err";}
-     }).catch(function(){btn.disabled=false;btn.textContent="Unlock vault";errBox.textContent="Network error. Check connection.";errBox.className="err";});
+     }).catch(function(err){btn.disabled=false;btn.textContent="Unlock vault";errBox.textContent="Network error: "+String(err);errBox.className="err";});
    }
    el("li-btn").onclick=submit;
    el("li-pass").onkeydown=function(e){if(e.key==="Enter"){submit();}};
@@ -181,9 +191,7 @@
        var item=items[i];var key=item.key_name;var desc=item.description||"";
        var sid="sec-"+proj.replace(/[^a-z0-9]/gi,"_")+"-"+i;
        html+='<div class="card hl">'+
-         '<div class="between">'+
-           '<div class="mono truncate" style="font-size:14px;font-weight:500">'+esc(key)+'</div>'+
-         '</div>'+
+         '<div class="mono truncate" style="font-size:14px;font-weight:500">'+esc(key)+'</div>'+
          (desc?'<div class="dim mt2">'+esc(desc)+'</div>':'')+
          '<div class="mono mt2 break" id="'+sid+'-val'+'"><span class="masked">'+dots(20)+'</span></div>'+
          '<div class="row mt3">'+
@@ -227,7 +235,7 @@
        btn.textContent="Hide";if(copyBtn){copyBtn.className="btn-sm";}
        toast("Revealed "+project+"/"+key+" (logged)","ok");
      }else{btn.textContent="Reveal";toast(errMsg(res),"error");}
-   }).catch(function(){btn.disabled=false;btn.textContent="Reveal";toast("Network error.","error");});
+   }).catch(function(err){btn.disabled=false;btn.textContent="Reveal";toast("Network: "+String(err),"error");});
  }
 
  function copySecret(sid){
@@ -243,7 +251,7 @@
    callFn("rotate_secret",{project:project,key_name:key,value:next}).then(function(res){
      if(res.ok){toast("Rotated "+project+"/"+key+".","ok");loadSecrets();}
      else{toast(errMsg(res),"error");}
-   }).catch(function(){toast("Network error.","error");});
+   }).catch(function(err){toast("Network: "+String(err),"error");});
  }
 
  function deleteSecret(project,key){
@@ -251,7 +259,7 @@
    callFn("delete_secret",{project:project,key_name:key}).then(function(res){
      if(res.ok){toast("Deleted "+project+"/"+key+".","ok");loadSecrets();}
      else{toast(errMsg(res),"error");}
-   }).catch(function(){toast("Network error.","error");});
+   }).catch(function(err){toast("Network: "+String(err),"error");});
  }
 
  function addSecret(){
@@ -270,21 +278,17 @@
        el("add-project").value="";el("add-name").value="";el("add-val").value="";el("add-desc").value="";
        loadSecrets();
      }else{toast(errMsg(res),"error");}
-   }).catch(function(){btn.disabled=false;btn.textContent="Save secret";toast("Network error.","error");});
+   }).catch(function(err){btn.disabled=false;btn.textContent="Save secret";toast("Network: "+String(err),"error");});
  }
 
  function loadSecrets(){
    state.secrets=null;renderList();
    callFn("list_secret_names",{}).then(function(res){
-     if(res.ok&&res.data&&res.data.secrets){
-       state.secrets=res.data.secrets;
-     }else if(res.ok){
-       state.secrets=[];
-     }else{
-       state.secrets=[];toast(errMsg(res),"error");
-     }
+     if(res.ok&&res.data&&res.data.secrets){state.secrets=res.data.secrets;}
+     else if(res.ok){state.secrets=[];}
+     else{state.secrets=[];toast(errMsg(res),"error");}
      renderList();
-   }).catch(function(){state.secrets=[];renderList();toast("Network error.","error");});
+   }).catch(function(err){state.secrets=[];renderList();toast("Network: "+String(err),"error");});
  }
 
  function loadLog(){
@@ -297,19 +301,15 @@
      var html='<div class="logbox stack">';var i;
      for(i=0;i<rows.length;i++){
        var r=rows[i];
-       var at=r.at||"";
-       var ac=r.action||"?";
-       var proj=r.project||"";
-       var kn=r.key_name||"";
        html+='<div class="logline mono">'+
-         '<span class="dim">'+esc(at)+'</span>'+
-         '<span style="color:#60a5fa">'+esc(ac)+'</span>'+
-         '<span style="color:#a78bfa">'+esc(proj)+'</span>'+
-         '<span class="truncate" style="color:#d4d4d8">'+esc(kn)+'</span>'+
+         '<span class="dim">'+esc(r.at||"")+'</span>'+
+         '<span style="color:#60a5fa">'+esc(r.action||"?")+'</span>'+
+         '<span style="color:#a78bfa">'+esc(r.project||"")+'</span>'+
+         '<span class="truncate" style="color:#d4d4d8">'+esc(r.key_name||"")+'</span>'+
        '</div>';
      }
      html+='</div>';body.innerHTML=html;
-   }).catch(function(){btn.disabled=false;btn.textContent="Load";toast("Network error.","error");});
+   }).catch(function(err){btn.disabled=false;btn.textContent="Load";toast("Network: "+String(err),"error");});
  }
 
  renderLogin();
