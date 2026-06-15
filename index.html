@@ -201,7 +201,7 @@
  function toggleServiceAccess(){
    var btn=el("sa-toggle");var enabling=(btn.textContent==="Enable");
    if(enabling){
-     if('window.confirm("Enable service access? External services with a valid token will be able to read secrets.")){return;}
+     if(!window.confirm("Enable service access? External services with a valid token will be able to read secrets.")){return;}
    }
    btn.disabled=true;btn.textContent="...";
    callFn("set_service_access",{enabled:enabling}).then(function(res){
@@ -396,7 +396,7 @@
    for(i=0;i<parts.length;i++){
      if(parts[i].indexOf("access_token=")===0){token=parts[i].replace("access_token=","");}
    }
-   if(!tokenz]{renderLogin();return;}
+   if(!token){renderLogin();return;}
    el("app").innerHTML=
      '<div class="center"><div style="width:100%;max-width:360px">'+
      '<div class="row mb6"><div class="logo">&#128274;</div>'+
